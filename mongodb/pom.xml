@@ -20,6 +20,7 @@
 	    <module>aggregation</module>
 		<!-- <module>change-streams</module> -->
 		<module>example</module>
+		<module>fragment-spi</module>
 		<module>fluent-api</module>
 		<module>geo-json</module>
 		<module>gridfs</module>
