@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,18 +16,18 @@
 package com.example.spi.mongodb.atlas;
 
 import java.util.List;
-import java.util.Objects;
 
 import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.ResolvableType;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.query.CriteriaDefinition;
+import org.springframework.data.repository.core.RepositoryMetadata;
+import org.springframework.data.repository.core.support.RepositoryMetadataAccess;
 import org.springframework.data.repository.core.support.RepositoryMethodContext;
-import org.springframework.lang.Nullable;
 
-class AtlasRepositoryFragment<T> implements AtlasRepository<T> {
+class AtlasRepositoryFragment<T> implements AtlasRepository<T>, RepositoryMetadataAccess {
 
     private MongoOperations mongoOperations;
 
@@ -41,16 +41,25 @@ class AtlasRepositoryFragment<T> implements AtlasRepository<T> {
 
         RepositoryMethodContext metadata = RepositoryMethodContext.currentMethod();
 
-        Class<?> domainType = metadata.getRepository().getDomainType();
-        System.out.println("domainType: " + domainType);
+        Class<?> domainType = resolveDomainType(metadata.getRepository());
 
-        Document $vectorSearch = createDocument(index, path, vector, limit, null, null, null);
+        Document $vectorSearch = createDocument(index, path, vector, limit);
         Aggregation aggregation = Aggregation.newAggregation(ctx -> $vectorSearch);
 
-        return (List<T>) mongoOperations.aggregate(aggregation, mongoOperations.getCollectionName(domainType), domainType);
+        return (List<T>) mongoOperations.aggregate(aggregation, mongoOperations.getCollectionName(domainType), domainType).getMappedResults();
     }
 
-    private static Document createDocument(String indexName, String path, List<Double> vector, Limit limit, @Nullable Boolean exact, @Nullable CriteriaDefinition filter, @Nullable Integer numCandidates) {
+    @SuppressWarnings("unchecked")
+    private static <T> Class<T> resolveDomainType(RepositoryMetadata metadata) {
+
+        // resolve the actual generic type argument of the AtlasRepository<T>.
+        return (Class<T>) ResolvableType.forClass(metadata.getRepositoryInterface())
+            .as(AtlasRepository.class)
+            .getGeneric(0)
+            .resolve();
+    }
+
+    private static Document createDocument(String indexName, String path, List<Double> vector, Limit limit) {
 
         Document $vectorSearch = new Document();
 
@@ -58,18 +67,7 @@ class AtlasRepositoryFragment<T> implements AtlasRepository<T> {
         $vectorSearch.append("path", path);
         $vectorSearch.append("queryVector", vector);
         $vectorSearch.append("limit", limit.max());
-
-        if (exact != null) {
-            $vectorSearch.append("exact", exact);
-        }
-
-        if (filter != null) {
-            $vectorSearch.append("filter", filter.getCriteriaObject());
-        }
-
-        if (numCandidates != null) {
-            $vectorSearch.append("numCandidates", numCandidates);
-        }
+        $vectorSearch.append("numCandidates", 150);
 
         return new Document("$vectorSearch", $vectorSearch);
     }
